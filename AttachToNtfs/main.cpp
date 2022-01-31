@@ -1,7 +1,11 @@
 #include <ntifs.h>
 #include <ntdef.h>
 #include <ntddk.h>
-#include <stdio.h>
+
+#include "fastio.h"
+
+
+
 
 /*
 AttachToNtfs!_DEVICE_OBJECT .LowerDevices
@@ -29,7 +33,7 @@ AttachToNtfs!_DEVICE_OBJECT .LowerDevices
 
 void DriverUnload(PDRIVER_OBJECT DriverObject);
 
-UNICODE_STRING AnonymousNtfs = RTL_CONSTANT_STRING(L"\\Device\\AnonymousNtfs");
+UNICODE_STRING AnonymousNtfs = RTL_CONSTANT_STRING(L"\\FileSystem\\AnonymousNtfs");
 UNICODE_STRING Ntfs = RTL_CONSTANT_STRING(L"\\??\\C:\\Windows\\System32\\drivers\\ntfs.sys");
 UNICODE_STRING NtfsDeviceName = RTL_CONSTANT_STRING(L"\\FileSystem\\Ntfs");
 
@@ -37,6 +41,8 @@ FILE_OBJECT* NtfsFile;
 DEVICE_OBJECT* NtfsDevice;
 DEVICE_OBJECT* NewDevice;
 DEVICE_OBJECT* TargetDevice;
+
+LARGE_INTEGER MmOneSecond = { (ULONG)(-1 * 1000 * 1000 * 10), -1 };
 
 FAST_IO_DISPATCH* Ptr_FAST_IO_DISPATCH;
 
@@ -79,9 +85,38 @@ extern "C" NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING Reg
 	}
 	memset(Ptr_FAST_IO_DISPATCH, 0, sizeof(FAST_IO_DISPATCH));
 
-
+	DriverObject->FastIoDispatch = Ptr_FAST_IO_DISPATCH;
+	
 	// 初始化fast io
 
+	Ptr_FAST_IO_DISPATCH->SizeOfFastIoDispatch = sizeof(FAST_IO_DISPATCH);
+	Ptr_FAST_IO_DISPATCH->AcquireFileForNtCreateSection = AcquireFileForNtCreateSection;
+	Ptr_FAST_IO_DISPATCH->AcquireForCcFlush = AcquireForCcFlush;
+	Ptr_FAST_IO_DISPATCH->AcquireForModWrite = AcquireForModWrite;
+	Ptr_FAST_IO_DISPATCH->FastIoCheckIfPossible = FastIoCheckIfPossible;
+	Ptr_FAST_IO_DISPATCH->FastIoDetachDevice = FastIoDetachDevice;
+	Ptr_FAST_IO_DISPATCH->FastIoDeviceControl = FastIoDeviceControl;
+	Ptr_FAST_IO_DISPATCH->FastIoLock = FastIoLock;
+	Ptr_FAST_IO_DISPATCH->FastIoQueryBasicInfo = FastIoQueryBasicInfo;
+	Ptr_FAST_IO_DISPATCH->FastIoQueryNetworkOpenInfo = FastIoQueryNetworkOpenInfo;
+	Ptr_FAST_IO_DISPATCH->FastIoQueryOpen = FastIoQueryOpen;
+	Ptr_FAST_IO_DISPATCH->FastIoQueryStandardInfo = FastIoQueryStandardInfo;
+	Ptr_FAST_IO_DISPATCH->FastIoRead = FastIoRead;
+	Ptr_FAST_IO_DISPATCH->FastIoReadCompressed = FastIoReadCompressed;
+	Ptr_FAST_IO_DISPATCH->FastIoUnlockAll = FastIoUnlockAll;
+	Ptr_FAST_IO_DISPATCH->FastIoUnlockAllByKey = FastIoUnlockAllByKey;
+	Ptr_FAST_IO_DISPATCH->FastIoUnlockSingle = FastIoUnlockSingle;
+	Ptr_FAST_IO_DISPATCH->FastIoWrite = FastIoWrite;
+	Ptr_FAST_IO_DISPATCH->FastIoWriteCompressed = FastIoWriteCompressed;
+	Ptr_FAST_IO_DISPATCH->MdlRead = MdlRead;
+	Ptr_FAST_IO_DISPATCH->MdlReadComplete = MdlReadComplete;
+	Ptr_FAST_IO_DISPATCH->MdlReadCompleteCompressed = MdlReadCompleteCompressed;
+	Ptr_FAST_IO_DISPATCH->MdlWriteComplete = MdlWriteComplete;
+	Ptr_FAST_IO_DISPATCH->MdlWriteCompleteCompressed = MdlWriteCompleteCompressed;
+	Ptr_FAST_IO_DISPATCH->PrepareMdlWrite = PrepareMdlWrite;
+	Ptr_FAST_IO_DISPATCH->ReleaseFileForNtCreateSection = ReleaseFileForNtCreateSection;
+	Ptr_FAST_IO_DISPATCH->ReleaseForCcFlush = ReleaseForCcFlush;
+	Ptr_FAST_IO_DISPATCH->ReleaseForModWrite = ReleaseForModWrite;
 
 
 	//初始化irp dispatch
@@ -123,9 +158,14 @@ extern "C" NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING Reg
 void DriverUnload(PDRIVER_OBJECT DriverObject)
 {
 
-	if (NewDevice)
-		IoDeleteDevice(NewDevice);
-	
+	IoDeleteDevice(NewDevice);
+	IoDetachDevice(TargetDevice);
+
+	//
+	//给三秒时间结束请求再卸载驱动
+	//
+	for(int i = 0;i<3;i++)
+		KeDelayExecutionThread(KernelMode, false, &MmOneSecond);
 
 	return;
 }
@@ -135,11 +175,17 @@ void DriverUnload(PDRIVER_OBJECT DriverObject)
 //
 NTSTATUS ATPassThrouth(PDEVICE_OBJECT DeviceObject, PIRP Irp)
 {
+	DbgBreakPoint();
+	//IoCopyCurrentIrpStackLocationToNext(Irp);
 	IoSkipCurrentIrpStackLocation(Irp);
+	
+
+
+	//
+	//把irp发给下层驱动
+	//
 	return IofCallDriver(DeviceObject->DeviceObjectExtension->AttachedTo, Irp);
 }
-
-
 
 
 

@@ -6,4 +6,4 @@
 绕过minifilter等文件过滤
 
 
-[!img](https://github.com/helloobaby/AttachToNtfs/blob/master/bypass.gif)
+![img](https://github.com/helloobaby/AttachToNtfs/blob/master/bypass.gif)

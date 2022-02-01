@@ -173,17 +173,26 @@ void DriverUnload(PDRIVER_OBJECT DriverObject)
 //
 //简单的把Irp转发给FltMgr.sys
 //
+
+/*  
+	 IRP Stack Location
+	 _________________					       地址  低
+	|			      |
+	|                 |   ->      Ntfs
+	|                 |
+	|_________________|	
+	|				  |	
+	|                 |   ->      FltMgr
+	|				  |
+	|_________________|
+	|				  |
+	|                 |   ->      AttachToNtfs
+	|                 |
+	|_________________|					       地址  高
+*/
 NTSTATUS ATPassThrouth(PDEVICE_OBJECT DeviceObject, PIRP Irp)
 {
-	DbgBreakPoint();
-	//IoCopyCurrentIrpStackLocationToNext(Irp);
 	IoSkipCurrentIrpStackLocation(Irp);
-	
-
-
-	//
-	//把irp发给下层驱动
-	//
 	return IofCallDriver(DeviceObject->DeviceObjectExtension->AttachedTo, Irp);
 }
 
